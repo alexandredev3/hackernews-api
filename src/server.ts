@@ -1,83 +1,44 @@
-import { ApolloServer, IResolvers } from 'apollo-server';
+import { 
+  ApolloServer, 
+  IResolvers as IResolversApollo,
+  PubSub
+} from 'apollo-server';
 import { readFileSync } from 'fs';
+import { PrismaClient } from '@prisma/client';
 import { join } from 'path';
 
-interface IParent {
-  id: string;
-  description: string;
-  url: string;
-}
+import Subscribe from './Resolvers/Subscription';
+import Mutation from './Resolvers/Mutation';
 
-interface IArgs {
-  id: string;
-  description: string;
-  url: string;
-}
-
-const links = [
-  {
-    id: 'link-0',
-    description: 'FullStack tutorial for Graphql',
-    url: 'www.howtographql.com'
-  }
-]
-
-let idCount = links.length;
-
-console.log(idCount)
+const pubSub = new PubSub();
+const prisma = new PrismaClient();
 
 // resolvers: implementação do schema acima.
 const resolvers = {
-  Query: {
-    info: () => `Essa e a API de clonar noticias`,
-    feed: () => links, // passo a array de Links
-    link: (parent: IParent, args: IArgs) => links.find(link => link.id === args.id)
-  },
+  // Query: {
+  //   info: () => `Essa e a API de clonar noticias`,
+  //   feed: async (parent, args, context) => {
+  //     const allLinks = await context.prisma.link.findMany();
+
+  //     return allLinks
+  //   }, // passo a array de Links
+  //   link: async (parent, args, context) => {
+  //     const { id } = args;
+
+  //     const link = await context.prisma.link.findUnique({
+  //       where: {
+  //         id: Number(id)
+  //       }
+  //     });
+
+  //     return link;
+  //   }
+  // },
 
   // args: São os argumentos que o schema Mutation > post recebe.
   // nesse caso a description e a url que sera criada.
-  Mutation: {
-    post: (parent: IParent, args: IArgs) => {
-      const link = {
-        id: `link-${idCount++}`,
-        description: args.description,
-        url: args.url
-      }
-
-
-      links.push(link)
-
-      return link;
-    },
-    updateLink: (parent: IParent, args: IArgs) => {
-      const linkIndex = links.findIndex(link => link.id === args.id)
-
-      const link = {
-        id: args.id,
-        description: args.description,
-        url: args.url
-      }
-
-      links[linkIndex] = link;
-
-      return link;
-    },
-    deleteLink: (parent: IParent, args: IArgs) => {
-      const linkIndex = links.findIndex(link => link.id === args.id);
-
-      links.splice(linkIndex, 1);
-
-      return `${args.id} has been deleted`;
-    }
-  },
-
-  // aqui na implementação do Link Schema.
-  // recebo as propriedades do objeto links pelo argumento parent(ou root) da função de cada campo.
-  // Link: {
-  //   id: (parent) => parent.id,
-  //   description: (parent) => parent.description,
-  //   url: (parent) => parent.url
-  // }
+  Mutation,
+  Subscribe
 };
 
 const server = new ApolloServer({
@@ -86,7 +47,18 @@ const server = new ApolloServer({
     join(__dirname, 'schema.graphql'),
     'utf-8'
   ),
-  resolvers
+  resolvers: resolvers as unknown as IResolversApollo,
+  context: ({ req }) => {
+    return {
+      ...req,
+      prisma,
+      pubSub,
+      userId:
+        req && req.headers.authorization
+          ? getUserId(req)
+          : null
+    }
+  }
 });
 
 server

@@ -17,3 +17,7 @@ type Link {
   description: String!
   url: String!
 }
+
+type Subscription {
+  newLink: Link
+}
